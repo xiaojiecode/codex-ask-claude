@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { constants } from "node:fs";
+import { homedir } from "node:os";
 
 function parseArgs(argv) {
   const result = {
@@ -19,6 +20,11 @@ function parseArgs(argv) {
     prompt: "",
     noLiveOutput: false,
     rawLiveOutput: false,
+    permissionMode: "",
+    allowedTools: [],
+    disallowedTools: [],
+    tools: "",
+    addDirs: [],
   };
 
   const aliases = {
@@ -38,6 +44,11 @@ function parseArgs(argv) {
     "--heartbeat-seconds": "heartbeatSeconds",
     "-Prompt": "prompt",
     "--prompt": "prompt",
+    "--permission-mode": "permissionMode",
+    "--allowed-tools": "allowedTools",
+    "--disallowed-tools": "disallowedTools",
+    "--tools": "tools",
+    "--add-dir": "addDirs",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -58,7 +69,11 @@ function parseArgs(argv) {
     if (index + 1 >= argv.length) {
       throw new Error(`Missing value for ${arg}`);
     }
-    result[key] = argv[index + 1];
+    if (Array.isArray(result[key])) {
+      result[key].push(argv[index + 1]);
+    } else {
+      result[key] = argv[index + 1];
+    }
     index += 1;
   }
 
@@ -88,6 +103,29 @@ function timestampForFile(date = new Date()) {
     pad(date.getMinutes()),
     pad(date.getSeconds()),
   ].join("");
+}
+
+function expandHomePath(value) {
+  if (typeof value !== "string" || value === "~" || !value.startsWith("~/")) {
+    return value === "~" ? homedir() : value;
+  }
+  return join(homedir(), value.slice(2));
+}
+
+function defaultExecutableSearchPaths() {
+  if (process.platform === "win32") {
+    return [];
+  }
+
+  return [
+    "~/.local/bin",
+    "~/.npm-global/bin",
+    "~/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+  ];
 }
 
 function truncateText(text, maxLength = 2000) {
@@ -143,6 +181,35 @@ function compactLiveLine(stream, text) {
   return "";
 }
 
+function isWindowsCommandShim(filePath) {
+  return process.platform === "win32" && /\.(?:cmd|bat)$/i.test(filePath);
+}
+
+function quoteForCmd(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function buildClaudeSpawn(resolvedClaudePath, claudeArgs) {
+  if (!isWindowsCommandShim(resolvedClaudePath)) {
+    return {
+      command: resolvedClaudePath,
+      args: claudeArgs,
+      windowsVerbatimArguments: false,
+    };
+  }
+
+  return {
+    command: process.env.ComSpec || "cmd.exe",
+    args: [
+      "/d",
+      "/s",
+      "/c",
+      `"${[resolvedClaudePath, ...claudeArgs].map(quoteForCmd).join(" ")}"`,
+    ],
+    windowsVerbatimArguments: true,
+  };
+}
+
 function writeRunLine(stream, text, logStream, quiet, raw = false) {
   const line = `[${new Date().toISOString()}][${stream}] ${text}`;
   logStream.write(`${line}\n`);
@@ -169,19 +236,25 @@ async function canExecute(filePath) {
 }
 
 async function resolveExecutable(command) {
+  const expandedCommand = expandHomePath(command);
+
   if (command.includes("/") || command.includes("\\") || isAbsolute(command)) {
-    const resolved = resolve(command);
+    const resolved = resolve(expandedCommand);
     return (await canExecute(resolved)) ? resolved : null;
   }
 
   const pathExt = process.platform === "win32"
     ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";")
     : [""];
-  const pathParts = (process.env.PATH || "").split(delimiter).filter(Boolean);
+  const pathParts = [
+    ...(process.env.PATH || "").split(delimiter).filter(Boolean),
+    ...defaultExecutableSearchPaths(),
+  ];
+  const uniquePathParts = [...new Set(pathParts.map(expandHomePath))];
 
-  for (const pathPart of pathParts) {
+  for (const pathPart of uniquePathParts) {
     for (const ext of pathExt) {
-      const candidate = join(pathPart, process.platform === "win32" && command.toLowerCase().endsWith(ext.toLowerCase()) ? command : `${command}${ext}`);
+      const candidate = join(pathPart, process.platform === "win32" && expandedCommand.toLowerCase().endsWith(ext.toLowerCase()) ? expandedCommand : `${expandedCommand}${ext}`);
       if (await canExecute(candidate)) {
         return candidate;
       }
@@ -192,10 +265,11 @@ async function resolveExecutable(command) {
 
 async function run() {
   const options = parseArgs(process.argv.slice(2));
-  const workspacePath = resolve(options.workspace);
-  const artifactRoot = isAbsolute(options.artifactDir)
-    ? options.artifactDir
-    : join(workspacePath, options.artifactDir);
+  const workspacePath = resolve(expandHomePath(options.workspace));
+  const artifactDirPath = expandHomePath(options.artifactDir);
+  const artifactRoot = isAbsolute(artifactDirPath)
+    ? artifactDirPath
+    : join(workspacePath, artifactDirPath);
 
   await mkdir(artifactRoot, { recursive: true });
 
@@ -230,7 +304,7 @@ async function run() {
       writeRunLine("error", message, logStream, options.noLiveOutput, options.rawLiveOutput);
       exitCode = 127;
     } else {
-      const claudeArgs = ["-p", "--output-format", "stream-json", "--include-partial-messages"];
+      const claudeArgs = ["-p", options.prompt, "--output-format", "stream-json", "--include-partial-messages"];
       if (options.model) {
         claudeArgs.push("--model", options.model);
       }
@@ -240,20 +314,28 @@ async function run() {
       if (options.effort) {
         claudeArgs.push("--effort", options.effort);
       }
-      claudeArgs.push(options.prompt);
-
-      const child = process.platform === "win32"
-        ? spawn(resolvedClaudePath, claudeArgs, {
-            cwd: workspacePath,
-            windowsHide: true,
-            shell: true,
-            stdio: ["ignore", "pipe", "pipe"],
-          })
-        : spawn(resolvedClaudePath, claudeArgs, {
-            cwd: workspacePath,
-            windowsHide: true,
-            stdio: ["ignore", "pipe", "pipe"],
-          });
+      if (options.permissionMode) {
+        claudeArgs.push("--permission-mode", options.permissionMode);
+      }
+      if (options.tools) {
+        claudeArgs.push("--tools", options.tools);
+      }
+      for (const allowedTool of options.allowedTools) {
+        claudeArgs.push("--allowed-tools", allowedTool);
+      }
+      for (const disallowedTool of options.disallowedTools) {
+        claudeArgs.push("--disallowed-tools", disallowedTool);
+      }
+      for (const addDir of options.addDirs) {
+        claudeArgs.push("--add-dir", expandHomePath(addDir));
+      }
+      const spawnSpec = buildClaudeSpawn(resolvedClaudePath, claudeArgs);
+      const child = spawn(spawnSpec.command, spawnSpec.args, {
+        cwd: workspacePath,
+        windowsHide: true,
+        windowsVerbatimArguments: spawnSpec.windowsVerbatimArguments,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
       let spawnError = null;
       child.once("error", (error) => {
@@ -367,6 +449,11 @@ async function run() {
     fallbackModel: options.fallbackModel,
     effort: options.effort,
     rawLiveOutput: options.rawLiveOutput,
+    permissionMode: options.permissionMode,
+    allowedTools: options.allowedTools,
+    disallowedTools: options.disallowedTools,
+    tools: options.tools,
+    addDirs: options.addDirs,
     needsClaudeInstall: exitCode === 127,
     installDeclinedMarkerPath,
     artifactPath,

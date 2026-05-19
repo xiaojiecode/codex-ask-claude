@@ -50,6 +50,32 @@ node ./scripts/invoke-claude-frontend.mjs \
   --prompt "Implement the requested frontend UI change by editing files directly."
 ```
 
+The wrapper works on Windows, macOS, and Linux. It expands `~` in workspace, artifact, and Claude executable paths, and on macOS/Linux also searches common non-login-shell locations such as `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` when `claude` is not on `PATH`.
+
+### Command Permissions
+
+The wrapper does not grant Claude extra privileges. Claude's available commands and tools are still governed by the local Claude CLI policy, the current OS user, and the target workspace. By default, the wrapper does not set a bypass mode.
+
+Use explicit permission flags when you want a tighter run:
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Edit,Glob,Grep" \
+  --disallowed-tools "Bash(rm *)" \
+  --add-dir "/path/to/extra-context" \
+  --prompt "Implement the requested frontend UI change by editing files directly."
+```
+
+Guidelines:
+
+- Prefer least privilege with `--allowed-tools` / `--disallowed-tools`.
+- Use `--tools ""` for advisory-only Claude responses with tools disabled.
+- Use `--add-dir` only for directories Claude should intentionally access.
+- Do not use bypass flags such as `--dangerously-skip-permissions` through this skill.
+- If Claude requests surprising command access, stop and ask before broadening permissions.
+
 ### Model Strategy
 
 - Use `sonnet` with `medium` effort for normal frontend implementation.
@@ -138,6 +164,32 @@ node ./scripts/invoke-claude-frontend.mjs \
   --fallback-model opus \
   --prompt "Implement the requested frontend UI change by editing files directly."
 ```
+
+该 wrapper 兼容 Windows、macOS 和 Linux。它会展开 workspace、artifact、Claude 可执行文件路径中的 `~`，并且在 macOS/Linux 的非登录 shell 环境下，当 `PATH` 里找不到 `claude` 时，会额外搜索 `~/.local/bin`、`~/bin`、`/opt/homebrew/bin`、`/usr/local/bin` 等常见目录。
+
+### 命令权限控制
+
+wrapper 不会给 Claude 额外提权。Claude 能使用哪些命令和工具，仍由本机 Claude CLI 策略、当前系统用户权限和目标工作区共同决定。默认情况下，wrapper 不设置绕过权限检查的模式。
+
+需要更严格控制时，可以显式传权限参数：
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Edit,Glob,Grep" \
+  --disallowed-tools "Bash(rm *)" \
+  --add-dir "/path/to/extra-context" \
+  --prompt "Implement the requested frontend UI change by editing files directly."
+```
+
+使用规则：
+
+- 优先最小权限，按任务需要配置 `--allowed-tools` / `--disallowed-tools`。
+- 只做咨询、不希望 Claude 使用工具时，使用 `--tools ""`。
+- 只有用户明确希望 Claude 访问额外目录时才使用 `--add-dir`。
+- 不要通过这个 skill 使用 `--dangerously-skip-permissions` 之类绕过权限检查的参数。
+- 如果 Claude 请求了意料之外的命令权限，先停下来询问用户，不要静默扩大权限。
 
 ### 模型策略
 

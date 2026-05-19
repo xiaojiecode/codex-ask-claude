@@ -47,6 +47,34 @@ node ./scripts/invoke-claude-frontend.mjs \
   --prompt "<precise implementation prompt>"
 ```
 
+The wrapper expands `~` in workspace, artifact, and Claude executable paths. On macOS/Linux, it also searches common non-login-shell locations such as `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` when `claude` is not on `PATH`.
+
+## Command Permission Control
+
+Claude command and tool permissions are controlled by the local Claude CLI session, not by Codex. The wrapper must not weaken that boundary: it does not elevate OS privileges, does not bypass Claude permission checks by default, and does not add extra filesystem access unless explicitly requested.
+
+Use these wrapper options when the task needs an explicit permission posture:
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/workspace" \
+  --permission-mode acceptEdits \
+  --allowed-tools "Read,Edit,Glob,Grep" \
+  --disallowed-tools "Bash(rm *)" \
+  --add-dir "/path/to/extra-readonly-context" \
+  --prompt "<precise implementation prompt>"
+```
+
+Permission rules:
+
+- Default: omit permission flags and let the user's configured Claude CLI policy decide.
+- Prefer least privilege: pass `--allowed-tools` when a task only needs read/edit/search tools.
+- Deny dangerous shell patterns with `--disallowed-tools` when shell access is unnecessary or risky.
+- Use `--tools ""` only when intentionally disabling Claude's tools for an advisory-only response.
+- Use `--add-dir` only for directories the user intentionally wants Claude to access.
+- Do not pass `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`, or bypass-style permission modes from this skill.
+- If Claude asks for an unexpected command permission, stop and ask the user instead of broadening access silently.
+
 Use a direct `claude -p "<prompt>"` call only if the Node wrapper is unavailable.
 
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.

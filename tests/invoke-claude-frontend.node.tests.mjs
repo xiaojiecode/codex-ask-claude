@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdtemp, mkdir, writeFile, readFile, rm, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -9,9 +9,13 @@ const tmpRoot = await mkdtemp(join(tmpdir(), "codex-ask-claude-node-test-"));
 const workspace = join(tmpRoot, "workspace");
 const bin = join(tmpRoot, "bin");
 
-function run(command, args) {
+function run(command, args, options = {}) {
   return new Promise((resolveRun) => {
-    const child = spawn(command, args, { cwd: repoRoot, shell: false });
+    const child = spawn(command, args, {
+      cwd: repoRoot,
+      shell: false,
+      env: options.env ?? process.env,
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => {
@@ -102,6 +106,14 @@ try {
     "medium",
     "--heartbeat-seconds",
     "1",
+    "--permission-mode",
+    "acceptEdits",
+    "--allowed-tools",
+    "Read,Edit",
+    "--disallowed-tools",
+    "Bash(rm *)",
+    "--add-dir",
+    workspace,
     "--prompt",
     "Build a responsive pricing table",
   ]);
@@ -112,6 +124,16 @@ try {
 
   if (!result.stdout.includes("[stdout] NODE_FAKE_STDOUT")) {
     throw new Error("Expected live stdout line to be visible.");
+  }
+  if (
+    !result.stdout.includes("--permission-mode")
+    || !result.stdout.includes("acceptEdits")
+    || !result.stdout.includes("--allowed-tools")
+    || !result.stdout.includes("Read,Edit")
+    || !result.stdout.includes("--disallowed-tools")
+    || !result.stdout.includes("Bash(rm *)")
+  ) {
+    throw new Error("Expected permission control flags to be passed to Claude.");
   }
   if (!result.stdout.includes("[stderr] NODE_FAKE_STDERR")) {
     throw new Error("Expected live stderr line to be visible.");
@@ -126,6 +148,9 @@ try {
   if (!parsed.success || parsed.model !== "sonnet" || parsed.fallbackModel !== "opus" || parsed.effort !== "medium") {
     throw new Error(`Unexpected result JSON: ${jsonLine}`);
   }
+  if (parsed.permissionMode !== "acceptEdits" || parsed.allowedTools?.[0] !== "Read,Edit" || parsed.disallowedTools?.[0] !== "Bash(rm *)" || parsed.addDirs?.[0] !== workspace) {
+    throw new Error(`Permission control metadata was not captured: ${jsonLine}`);
+  }
 
   const artifact = await readFile(parsed.artifactPath, "utf8");
   const log = await readFile(parsed.logPath, "utf8");
@@ -134,6 +159,30 @@ try {
   }
   if (!log.includes("[stdout] NODE_FAKE_STDOUT") || !log.includes("[stderr] NODE_FAKE_STDERR")) {
     throw new Error("Expected log to include tagged stdout and stderr.");
+  }
+
+  const pathLookup = await run(
+    process.execPath,
+    [
+      join(repoRoot, "scripts", "invoke-claude-frontend.mjs"),
+      "--workspace",
+      workspace,
+      "--claude-path",
+      "claude",
+      "--artifact-dir",
+      ".omx/test-artifacts",
+      "--prompt",
+      "Build a responsive pricing table",
+    ],
+    {
+      env: {
+        ...process.env,
+        PATH: `${bin}${delimiter}${process.env.PATH || ""}`,
+      },
+    },
+  );
+  if (pathLookup.code !== 0 || !pathLookup.stdout.includes("NODE_FAKE_STDOUT")) {
+    throw new Error(`Expected PATH lookup to find fake Claude.\n${pathLookup.stderr}\n${pathLookup.stdout}`);
   }
 
   const compact = await run(process.execPath, [

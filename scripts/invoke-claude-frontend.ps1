@@ -121,9 +121,9 @@ try {
 param(
     [string]$ClaudePath,
     [string]$Prompt,
-    [string]$Model,
-    [string]$FallbackModel,
-    [string]$Effort
+    [string]$Model = "",
+    [string]$FallbackModel = "",
+    [string]$Effort = ""
 )
 
 $argsList = @("-p", "--output-format", "stream-json", "--include-partial-messages")
@@ -148,16 +148,19 @@ exit $LASTEXITCODE
     [System.IO.File]::WriteAllText($runnerPath, $runner, $utf8NoBom)
 
     $powerShellPath = (Get-Process -Id $PID).Path
-    $argumentList = @(
+    $runnerArgs = @(
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-File", (ConvertTo-ProcessArgument -Value $runnerPath),
         "-ClaudePath", (ConvertTo-ProcessArgument -Value $resolvedClaudePath),
         "-Prompt", (ConvertTo-ProcessArgument -Value $Prompt),
         "-Model", (ConvertTo-ProcessArgument -Value $Model),
-        "-FallbackModel", (ConvertTo-ProcessArgument -Value $FallbackModel),
         "-Effort", (ConvertTo-ProcessArgument -Value $Effort)
-    ) -join " "
+    )
+    if (-not [string]::IsNullOrWhiteSpace($FallbackModel)) {
+        $runnerArgs += @("-FallbackModel", (ConvertTo-ProcessArgument -Value $FallbackModel))
+    }
+    $argumentList = $runnerArgs -join " "
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $powerShellPath

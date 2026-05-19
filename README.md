@@ -15,7 +15,6 @@
 ### Requirements
 
 - Node.js 18+ for the cross-platform wrapper
-- Windows PowerShell or PowerShell 7 for the Windows wrapper
 - Local Claude CLI installed and authenticated
 - Codex skill runtime
 
@@ -51,17 +50,6 @@ node ./scripts/invoke-claude-frontend.mjs \
   --prompt "Implement the requested frontend UI change by editing files directly."
 ```
 
-On Windows, the PowerShell wrapper is also available:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
-  -Workspace "D:\path\to\frontend-project" `
-  -Model sonnet `
-  -Effort medium `
-  -FallbackModel opus `
-  -Prompt "Implement the requested frontend UI change by editing files directly."
-```
-
 ### Model Strategy
 
 - Use `sonnet` with `medium` effort for normal frontend implementation.
@@ -78,19 +66,11 @@ The wrapper is built for slow model calls and poor network conditions. It:
 - emits heartbeat status lines when Claude is still running without output
 - records the full raw stdout/stderr stream in `.log` and `.md` artifacts
 
-It only surfaces visible CLI output. It should not expose hidden chain-of-thought. Use `-RawLiveOutput` / `--raw-live-output` only when you need the uncompressed live stream for debugging.
+It only surfaces visible CLI output. It should not expose hidden chain-of-thought. Use `--raw-live-output` only when you need the uncompressed live stream for debugging.
 
 ### Missing Claude CLI
 
 If Claude CLI is missing, Codex should ask whether to install and configure it. If the user declines, record that decision:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\remember-claude-install-declined.ps1 `
-  -Workspace "D:\path\to\frontend-project" `
-  -Reason "User declined Claude CLI setup for frontend delegation."
-```
-
-Cross-platform equivalent:
 
 ```bash
 node ./scripts/remember-claude-install-declined.mjs \
@@ -103,7 +83,6 @@ This creates `.omx/state/claude-install-declined.json` in the target workspace s
 ### Test
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\invoke-claude-frontend.tests.ps1
 node .\tests\invoke-claude-frontend.node.tests.mjs
 python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Code\Codex\codex-ask-claude
 ```
@@ -125,7 +104,6 @@ python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_
 ### 环境要求
 
 - Node.js 18+，用于跨平台包装脚本
-- Windows PowerShell 或 PowerShell 7，用于 Windows 包装脚本
 - 已安装并完成认证的本地 Claude CLI
 - Codex skill 运行环境
 
@@ -161,17 +139,6 @@ node ./scripts/invoke-claude-frontend.mjs \
   --prompt "Implement the requested frontend UI change by editing files directly."
 ```
 
-在 Windows 中也可以使用 PowerShell 包装脚本：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
-  -Workspace "D:\path\to\frontend-project" `
-  -Model sonnet `
-  -Effort medium `
-  -FallbackModel opus `
-  -Prompt "Implement the requested frontend UI change by editing files directly."
-```
-
 ### 模型策略
 
 - 常规前端实现使用 `sonnet` + `medium`。
@@ -188,19 +155,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
 - Claude 暂时没有输出时定期打印等待状态
 - 在 `.log` 和 `.md` artifact 中保存完整原始 stdout/stderr
 
-脚本只展示 CLI 可见输出，不应暴露隐藏的 chain-of-thought。只有调试 wrapper 或 Claude 协议输出时才建议使用 `-RawLiveOutput` / `--raw-live-output` 恢复原始实时流。
+脚本只展示 CLI 可见输出，不应暴露隐藏的 chain-of-thought。只有调试 wrapper 或 Claude 协议输出时才建议使用 `--raw-live-output` 恢复原始实时流。
 
 ### Claude CLI 缺失处理
 
 如果 Claude CLI 没有安装，Codex 应先询问用户是否安装并配置。若用户拒绝，可记录该选择：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\remember-claude-install-declined.ps1 `
-  -Workspace "D:\path\to\frontend-project" `
-  -Reason "User declined Claude CLI setup for frontend delegation."
-```
-
-跨平台等价命令：
 
 ```bash
 node ./scripts/remember-claude-install-declined.mjs \
@@ -213,7 +172,6 @@ node ./scripts/remember-claude-install-declined.mjs \
 ### 测试
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\invoke-claude-frontend.tests.ps1
 node .\tests\invoke-claude-frontend.node.tests.mjs
 python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Code\Codex\codex-ask-claude
 ```

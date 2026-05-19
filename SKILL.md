@@ -19,10 +19,10 @@ If `claude` is missing, check whether `.omx/state/claude-install-declined.json` 
 
 If the user declines installation/configuration, record the choice so future runs do not repeat the same question:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\remember-claude-install-declined.ps1 `
-  -Workspace "D:\path\to\workspace" `
-  -Reason "User declined Claude CLI setup for frontend delegation."
+```bash
+node ./scripts/remember-claude-install-declined.mjs \
+  --workspace "/path/to/workspace" \
+  --reason "User declined Claude CLI setup for frontend delegation."
 ```
 
 2. Inspect the target workspace enough to produce a precise implementation prompt:
@@ -36,7 +36,7 @@ Read the package/build files and only the UI files needed to understand the task
 
 3. Ask Claude CLI to make the frontend edits directly. Prefer a bundled wrapper because it captures raw stdout/stderr to a run log, shows compact live progress by default, and leaves an artifact.
 
-Use the Node.js wrapper on macOS, Linux, WSL, CI, or any environment where Node is available:
+Use the Node.js wrapper on all platforms, including Windows:
 
 ```bash
 node ./scripts/invoke-claude-frontend.mjs \
@@ -47,22 +47,11 @@ node ./scripts/invoke-claude-frontend.mjs \
   --prompt "<precise implementation prompt>"
 ```
 
-Use the PowerShell wrapper on Windows when PowerShell is the natural shell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
-  -Workspace "D:\path\to\workspace" `
-  -Model sonnet `
-  -Effort medium `
-  -FallbackModel opus `
-  -Prompt "<precise implementation prompt>"
-```
-
-Use a direct `claude -p "<prompt>"` call only if both wrappers are unavailable.
+Use a direct `claude -p "<prompt>"` call only if the Node wrapper is unavailable.
 
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.
 
-By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.omx/artifacts/*.log` and `.omx/artifacts/*.md`. Use `-RawLiveOutput` only when debugging the wrapper or Claude protocol output.
+By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.omx/artifacts/*.log` and `.omx/artifacts/*.md`. Use `--raw-live-output` only when debugging the wrapper or Claude protocol output.
 
 ## Model Selection
 

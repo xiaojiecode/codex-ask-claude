@@ -46,7 +46,7 @@ function parseArgs(argv) {
       result.noLiveOutput = true;
       continue;
     }
-    if (arg === "-RawLiveOutput" || arg === "--raw-live-output") {
+    if (arg === "--raw-live-output") {
       result.rawLiveOutput = true;
       continue;
     }
@@ -114,8 +114,8 @@ function compactLiveLine(stream, text) {
     if (event.subtype === "init") {
       return `Claude session started; model=${event.model}; cwd=${event.cwd}`;
     }
-    if (event.status) {
-      return `Claude status: ${event.status}`;
+    if (event.status !== undefined && event.status !== null && String(event.status).trim()) {
+      return `Claude status: ${truncateText(event.status)}`;
     }
     return "";
   }

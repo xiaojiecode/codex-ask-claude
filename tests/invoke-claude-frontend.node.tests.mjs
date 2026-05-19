@@ -48,6 +48,7 @@ try {
       [
         "@echo off",
         "echo {\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"workspace\",\"model\":\"claude-sonnet-4-6\"}",
+        "echo {\"type\":\"system\",\"subtype\":\"ready\"}",
         "echo {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"正在分析配置文件\"}]}}",
         "echo {\"type\":\"result\",\"result\":\"完成\",\"subtype\":\"end_turn\"}",
         "exit /b 0",
@@ -74,6 +75,7 @@ try {
       [
         "#!/usr/bin/env sh",
         "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"workspace\",\"model\":\"claude-sonnet-4-6\"}'",
+        "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"ready\"}'",
         "printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"正在分析配置文件\"}]}}'",
         "printf '%s\\n' '{\"type\":\"result\",\"result\":\"完成\",\"subtype\":\"end_turn\"}'",
         "exit 0",

@@ -32,7 +32,7 @@ After editing, summarize:
 
 If Claude's first pass is close but incomplete, send a short follow-up prompt that includes the failing check, the observed issue, and the exact file or UI surface to correct.
 
-For slow network or long model calls, invoke the wrapper with live output enabled and a generous outer command timeout. The terminal shows compact progress by default; use the saved `.omx/artifacts/*.log` for the raw stdout/stderr stream, or pass `-RawLiveOutput` / `--raw-live-output` only when debugging protocol-level output.
+For slow network or long model calls, invoke the Node wrapper with live output enabled and a generous outer command timeout. The terminal shows compact progress by default; use the saved `.omx/artifacts/*.log` for the raw stdout/stderr stream, or pass `--raw-live-output` only when debugging protocol-level output.
 
 Model defaults:
 

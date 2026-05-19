@@ -34,7 +34,20 @@ rg --files
 
 Read the package/build files and only the UI files needed to understand the task.
 
-3. Ask Claude CLI to make the frontend edits directly. Prefer the bundled wrapper because it captures live stdout/stderr, writes a run log, and leaves an artifact:
+3. Ask Claude CLI to make the frontend edits directly. Prefer a bundled wrapper because it captures live stdout/stderr, writes a run log, and leaves an artifact.
+
+Use the Node.js wrapper on macOS, Linux, WSL, CI, or any environment where Node is available:
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/workspace" \
+  --model sonnet \
+  --effort medium \
+  --fallback-model opus \
+  --prompt "<precise implementation prompt>"
+```
+
+Use the PowerShell wrapper on Windows when PowerShell is the natural shell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
@@ -45,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
   -Prompt "<precise implementation prompt>"
 ```
 
-Use a direct `claude -p "<prompt>"` call only if the wrapper is unavailable.
+Use a direct `claude -p "<prompt>"` call only if both wrappers are unavailable.
 
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.
 

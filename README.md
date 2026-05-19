@@ -14,7 +14,8 @@
 
 ### Requirements
 
-- Windows PowerShell or PowerShell 7
+- Node.js 18+ for the cross-platform wrapper
+- Windows PowerShell or PowerShell 7 for the Windows wrapper
 - Local Claude CLI installed and authenticated
 - Codex skill runtime
 
@@ -39,7 +40,18 @@ codex-ask-claude/
 
 ### Usage
 
-Run the wrapper from the skill folder:
+Run the cross-platform Node.js wrapper from the skill folder:
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --model sonnet \
+  --effort medium \
+  --fallback-model opus \
+  --prompt "Implement the requested frontend UI change by editing files directly."
+```
+
+On Windows, the PowerShell wrapper is also available:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
@@ -78,12 +90,21 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remember-claude-install-decli
   -Reason "User declined Claude CLI setup for frontend delegation."
 ```
 
+Cross-platform equivalent:
+
+```bash
+node ./scripts/remember-claude-install-declined.mjs \
+  --workspace "/path/to/frontend-project" \
+  --reason "User declined Claude CLI setup for frontend delegation."
+```
+
 This creates `.omx/state/claude-install-declined.json` in the target workspace so future runs can avoid repeated prompts.
 
 ### Test
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\invoke-claude-frontend.tests.ps1
+node .\tests\invoke-claude-frontend.node.tests.mjs
 python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Code\Codex\codex-ask-claude
 ```
 
@@ -103,7 +124,8 @@ python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_
 
 ### 环境要求
 
-- Windows PowerShell 或 PowerShell 7
+- Node.js 18+，用于跨平台包装脚本
+- Windows PowerShell 或 PowerShell 7，用于 Windows 包装脚本
 - 已安装并完成认证的本地 Claude CLI
 - Codex skill 运行环境
 
@@ -128,7 +150,18 @@ codex-ask-claude/
 
 ### 使用
 
-在 skill 目录中运行包装脚本：
+在 skill 目录中运行跨平台 Node.js 包装脚本：
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --model sonnet \
+  --effort medium \
+  --fallback-model opus \
+  --prompt "Implement the requested frontend UI change by editing files directly."
+```
+
+在 Windows 中也可以使用 PowerShell 包装脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
@@ -167,11 +200,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\remember-claude-install-decli
   -Reason "User declined Claude CLI setup for frontend delegation."
 ```
 
+跨平台等价命令：
+
+```bash
+node ./scripts/remember-claude-install-declined.mjs \
+  --workspace "/path/to/frontend-project" \
+  --reason "User declined Claude CLI setup for frontend delegation."
+```
+
 这会在目标工作区生成 `.omx/state/claude-install-declined.json`，后续运行时可避免重复询问。
 
 ### 测试
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\invoke-claude-frontend.tests.ps1
+node .\tests\invoke-claude-frontend.node.tests.mjs
 python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_validate.py D:\Code\Codex\codex-ask-claude
 ```

@@ -20,6 +20,19 @@ echo expected -p
 exit /b 2
 "@ | Set-Content -Path $fakeClaude -Encoding ASCII
 
+$fakeClaudeJson = Join-Path $bin "claude-json.cmd"
+@"
+@echo off
+if "%1"=="-p" (
+  echo {"type":"system","subtype":"init","cwd":"workspace","model":"claude-sonnet-4-6"}
+  echo {"type":"assistant","message":{"content":[{"type":"text","text":"正在分析配置文件"}]}}
+  echo {"type":"result","result":"完成","subtype":"end_turn"}
+  exit /b 0
+)
+echo expected -p
+exit /b 2
+"@ | Set-Content -Path $fakeClaudeJson -Encoding ASCII
+
 try {
     $output = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\invoke-claude-frontend.ps1") `
         -Workspace $workspace `
@@ -72,6 +85,20 @@ try {
     }
     if ($log -notmatch "\[stderr\].*CLAUDE_FAKE_STDERR") {
         throw "Claude stderr was not tagged in live log"
+    }
+
+    $jsonOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\invoke-claude-frontend.ps1") `
+        -Workspace $workspace `
+        -ClaudePath $fakeClaudeJson `
+        -ArtifactDir ".omx/test-artifacts" `
+        -Prompt "Build a responsive pricing table"
+
+    $jsonVisible = $jsonOutput -join "`n"
+    if ($jsonVisible -match '"type":"system","subtype":"init"') {
+        throw "Expected compact live output, not raw JSON stream"
+    }
+    if ($jsonVisible -notmatch "Claude session started; model=claude-sonnet-4-6") {
+        throw "Expected compact live output summary for JSON stream"
     }
 
     $missingOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\invoke-claude-frontend.ps1") `

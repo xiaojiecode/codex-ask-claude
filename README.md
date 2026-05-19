@@ -7,7 +7,7 @@
 ### What It Does
 
 - Delegates React, Vue, Svelte, Angular, HTML, CSS, Tailwind, component, layout, and responsive UI work to Claude CLI.
-- Streams Claude CLI `stdout` and `stderr` while the model is running, so long or slow network calls are visible instead of silent.
+- Shows compact Claude CLI progress while the model is running, so long or slow network calls are visible without flooding stdout.
 - Saves a Markdown artifact and a live output log under `.omx/artifacts`.
 - Supports explicit model selection through `-Model`, `-FallbackModel`, and `-Effort`.
 - Detects missing Claude CLI and supports remembering when the user declines installation.
@@ -74,11 +74,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
 The wrapper is built for slow model calls and poor network conditions. It:
 
 - waits for long-running Claude CLI calls
-- streams visible `stdout` and `stderr`
+- shows compact progress for Claude `stream-json` output
 - emits heartbeat status lines when Claude is still running without output
-- records a full `.log` and `.md` artifact
+- records the full raw stdout/stderr stream in `.log` and `.md` artifacts
 
-It only surfaces visible CLI output. It should not expose hidden chain-of-thought.
+It only surfaces visible CLI output. It should not expose hidden chain-of-thought. Use `-RawLiveOutput` / `--raw-live-output` only when you need the uncompressed live stream for debugging.
 
 ### Missing Claude CLI
 
@@ -117,7 +117,7 @@ python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_
 ### 功能
 
 - 将 React、Vue、Svelte、Angular、HTML、CSS、Tailwind、组件、布局、响应式 UI 等任务委托给 Claude CLI。
-- 在模型运行时实时输出 Claude CLI 的 `stdout` 和 `stderr`，长时间调用或网络较差时不会像黑盒一样无响应。
+- 在模型运行时展示精简进度，长时间调用或网络较差时不会像黑盒一样无响应，也不会把完整 `stream-json` 刷满 stdout。
 - 在 `.omx/artifacts` 下保存 Markdown artifact 和完整运行日志。
 - 支持通过 `-Model`、`-FallbackModel`、`-Effort` 显式选择模型策略。
 - 能检测 Claude CLI 是否缺失，并在用户拒绝安装后记录状态，避免反复询问。
@@ -184,11 +184,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
 包装脚本专门处理耗时较长或网络较差的 Claude 调用。它会：
 
 - 等待长时间运行的 Claude CLI 调用
-- 实时转发可见的 `stdout` 和 `stderr`
+- 对 Claude `stream-json` 输出展示精简进度
 - Claude 暂时没有输出时定期打印等待状态
-- 保存完整 `.log` 和 `.md` artifact
+- 在 `.log` 和 `.md` artifact 中保存完整原始 stdout/stderr
 
-脚本只展示 CLI 可见输出，不应暴露隐藏的 chain-of-thought。
+脚本只展示 CLI 可见输出，不应暴露隐藏的 chain-of-thought。只有调试 wrapper 或 Claude 协议输出时才建议使用 `-RawLiveOutput` / `--raw-live-output` 恢复原始实时流。
 
 ### Claude CLI 缺失处理
 

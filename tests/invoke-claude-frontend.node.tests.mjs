@@ -29,6 +29,7 @@ try {
   await mkdir(bin, { recursive: true });
 
   const fakeClaude = process.platform === "win32" ? join(bin, "claude.cmd") : join(bin, "claude");
+  const fakeClaudeJson = process.platform === "win32" ? join(bin, "claude-json.cmd") : join(bin, "claude-json");
   if (process.platform === "win32") {
     await writeFile(
       fakeClaude,
@@ -37,6 +38,18 @@ try {
         "echo NODE_FAKE_STDOUT:%*",
         "powershell -NoProfile -Command \"Start-Sleep -Milliseconds 300\"",
         "echo NODE_FAKE_STDERR 1>&2",
+        "exit /b 0",
+        "",
+      ].join("\r\n"),
+      "ascii",
+    );
+    await writeFile(
+      fakeClaudeJson,
+      [
+        "@echo off",
+        "echo {\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"workspace\",\"model\":\"claude-sonnet-4-6\"}",
+        "echo {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"正在分析配置文件\"}]}}",
+        "echo {\"type\":\"result\",\"result\":\"完成\",\"subtype\":\"end_turn\"}",
         "exit /b 0",
         "",
       ].join("\r\n"),
@@ -56,6 +69,19 @@ try {
       "utf8",
     );
     await chmod(fakeClaude, 0o755);
+    await writeFile(
+      fakeClaudeJson,
+      [
+        "#!/usr/bin/env sh",
+        "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"workspace\",\"model\":\"claude-sonnet-4-6\"}'",
+        "printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"正在分析配置文件\"}]}}'",
+        "printf '%s\\n' '{\"type\":\"result\",\"result\":\"完成\",\"subtype\":\"end_turn\"}'",
+        "exit 0",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await chmod(fakeClaudeJson, 0o755);
   }
 
   const result = await run(process.execPath, [
@@ -106,6 +132,24 @@ try {
   }
   if (!log.includes("[stdout] NODE_FAKE_STDOUT") || !log.includes("[stderr] NODE_FAKE_STDERR")) {
     throw new Error("Expected log to include tagged stdout and stderr.");
+  }
+
+  const compact = await run(process.execPath, [
+    join(repoRoot, "scripts", "invoke-claude-frontend.mjs"),
+    "--workspace",
+    workspace,
+    "--claude-path",
+    fakeClaudeJson,
+    "--artifact-dir",
+    ".omx/test-artifacts",
+    "--prompt",
+    "Build a responsive pricing table",
+  ]);
+  if (compact.stdout.includes('"type":"system","subtype":"init"')) {
+    throw new Error("Expected compact live output, not raw JSON stream.");
+  }
+  if (!compact.stdout.includes("Claude session started; model=claude-sonnet-4-6")) {
+    throw new Error("Expected compact live output summary for JSON stream.");
   }
 
   const missing = await run(process.execPath, [

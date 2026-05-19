@@ -18,6 +18,7 @@ function parseArgs(argv) {
     heartbeatSeconds: 30,
     prompt: "",
     noLiveOutput: false,
+    rawLiveOutput: false,
   };
 
   const aliases = {
@@ -43,6 +44,10 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === "-NoLiveOutput" || arg === "--no-live-output") {
       result.noLiveOutput = true;
+      continue;
+    }
+    if (arg === "-RawLiveOutput" || arg === "--raw-live-output") {
+      result.rawLiveOutput = true;
       continue;
     }
 
@@ -85,11 +90,67 @@ function timestampForFile(date = new Date()) {
   ].join("");
 }
 
-function writeRunLine(stream, text, logStream, quiet) {
+function truncateText(text, maxLength = 2000) {
+  const singleLine = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (singleLine.length <= maxLength) {
+    return singleLine;
+  }
+  return `${singleLine.slice(0, maxLength).trimEnd()}... [truncated]`;
+}
+
+function compactLiveLine(stream, text) {
+  if (stream !== "stdout") {
+    return truncateText(text);
+  }
+
+  let event;
+  try {
+    event = JSON.parse(text);
+  } catch {
+    return truncateText(text);
+  }
+
+  if (event.type === "system") {
+    if (event.subtype === "init") {
+      return `Claude session started; model=${event.model}; cwd=${event.cwd}`;
+    }
+    if (event.status) {
+      return `Claude status: ${event.status}`;
+    }
+    return "";
+  }
+
+  if (event.type === "assistant" && Array.isArray(event.message?.content)) {
+    const parts = [];
+    for (const content of event.message.content) {
+      if (content.type === "text" && content.text?.trim()) {
+        parts.push(truncateText(content.text, 2000));
+      } else if (content.type === "tool_use") {
+        const input = content.input ? JSON.stringify(content.input) : "";
+        parts.push(truncateText(`tool ${content.name}: ${input}`, 1000));
+      }
+    }
+    return parts.join(" | ");
+  }
+
+  if (event.type === "result") {
+    if (event.result?.trim()) {
+      return truncateText(`Claude result: ${event.result}`, 4000);
+    }
+    return `Claude finished: ${event.subtype}`;
+  }
+
+  return "";
+}
+
+function writeRunLine(stream, text, logStream, quiet, raw = false) {
   const line = `[${new Date().toISOString()}][${stream}] ${text}`;
   logStream.write(`${line}\n`);
   if (!quiet) {
-    process.stdout.write(`[${stream}] ${text}\n`);
+    const visibleText = raw ? text : compactLiveLine(stream, text);
+    if (visibleText.trim()) {
+      process.stdout.write(`[${stream}] ${visibleText}\n`);
+    }
   }
 }
 
@@ -166,7 +227,7 @@ async function run() {
     if (!resolvedClaudePath) {
       const message = `Claude CLI was not found. Ask the user whether to install and configure Claude; if they decline, record that decision at ${installDeclinedMarkerPath}.`;
       stderrLines.push(message);
-      writeRunLine("error", message, logStream, options.noLiveOutput);
+      writeRunLine("error", message, logStream, options.noLiveOutput, options.rawLiveOutput);
       exitCode = 127;
     } else {
       const claudeArgs = ["-p", "--output-format", "stream-json", "--include-partial-messages"];
@@ -199,7 +260,7 @@ async function run() {
         spawnError = error;
         const message = `Claude CLI was not found or could not be started: ${error.message}`;
         stderrLines.push(message);
-        writeRunLine("error", message, logStream, options.noLiveOutput);
+        writeRunLine("error", message, logStream, options.noLiveOutput, options.rawLiveOutput);
       });
 
       if (options.heartbeatSeconds > 0) {
@@ -207,7 +268,7 @@ async function run() {
           const idleSeconds = (Date.now() - lastOutputAt) / 1000;
           if (idleSeconds >= options.heartbeatSeconds) {
             lastOutputAt = Date.now();
-            writeRunLine("status", "Claude is still running; waiting for output...", logStream, options.noLiveOutput);
+            writeRunLine("status", "Claude is still running; waiting for output...", logStream, options.noLiveOutput, options.rawLiveOutput);
           }
         }, Math.max(250, Math.min(options.heartbeatSeconds * 1000, 1000)));
       }
@@ -218,12 +279,12 @@ async function run() {
       stdoutReader.on("line", (line) => {
         stdoutLines.push(line);
         lastOutputAt = Date.now();
-        writeRunLine("stdout", line, logStream, options.noLiveOutput);
+        writeRunLine("stdout", line, logStream, options.noLiveOutput, options.rawLiveOutput);
       });
       stderrReader.on("line", (line) => {
         stderrLines.push(line);
         lastOutputAt = Date.now();
-        writeRunLine("stderr", line, logStream, options.noLiveOutput);
+        writeRunLine("stderr", line, logStream, options.noLiveOutput, options.rawLiveOutput);
       });
 
       exitCode = await new Promise((resolveExit) => {
@@ -291,7 +352,13 @@ async function run() {
   await mkdir(dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, artifact, "utf8");
 
-  const outputPreview = [...stdoutLines, ...stderrLines].join(" ").replace(/\s+/g, " ").trim();
+  const outputPreview = truncateText(
+    [
+      ...stdoutLines.map((line) => compactLiveLine("stdout", line)).filter(Boolean),
+      ...stderrLines.map((line) => compactLiveLine("stderr", line)).filter(Boolean),
+    ].join("\n"),
+    4000,
+  );
   const result = {
     success: exitCode === 0,
     exitCode,
@@ -299,6 +366,7 @@ async function run() {
     model: options.model,
     fallbackModel: options.fallbackModel,
     effort: options.effort,
+    rawLiveOutput: options.rawLiveOutput,
     needsClaudeInstall: exitCode === 127,
     installDeclinedMarkerPath,
     artifactPath,

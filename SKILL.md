@@ -34,7 +34,7 @@ rg --files
 
 Read the package/build files and only the UI files needed to understand the task.
 
-3. Ask Claude CLI to make the frontend edits directly. Prefer a bundled wrapper because it captures live stdout/stderr, writes a run log, and leaves an artifact.
+3. Ask Claude CLI to make the frontend edits directly. Prefer a bundled wrapper because it captures raw stdout/stderr to a run log, shows compact live progress by default, and leaves an artifact.
 
 Use the Node.js wrapper on macOS, Linux, WSL, CI, or any environment where Node is available:
 
@@ -61,6 +61,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\invoke-claude-frontend.ps1 `
 Use a direct `claude -p "<prompt>"` call only if both wrappers are unavailable.
 
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.
+
+By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.omx/artifacts/*.log` and `.omx/artifacts/*.md`. Use `-RawLiveOutput` only when debugging the wrapper or Claude protocol output.
 
 ## Model Selection
 

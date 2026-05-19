@@ -19,7 +19,9 @@ param(
 
     [int]$PollIntervalMilliseconds = 250,
 
-    [switch]$NoLiveOutput
+    [switch]$NoLiveOutput,
+
+    [switch]$RawLiveOutput
 )
 
 Set-StrictMode -Version Latest
@@ -54,15 +56,87 @@ function Write-RunLine {
         [string]$Stream,
         [string]$Text,
         [System.Collections.Generic.List[string]]$LogLines,
-        [switch]$Quiet
+        [switch]$Quiet,
+        [switch]$Raw
     )
 
     $timestamp = Get-Date -Format "o"
     $line = "[$timestamp][$Stream] $Text"
     $LogLines.Add($line)
     if (-not $Quiet) {
-        Write-Host "[$Stream] $Text"
+        $visibleText = if ($Raw) { $Text } else { ConvertTo-CompactLiveLine -Stream $Stream -Text $Text }
+        if (-not [string]::IsNullOrWhiteSpace($visibleText)) {
+            Write-Host "[$Stream] $visibleText"
+        }
     }
+}
+
+function ConvertTo-TruncatedText {
+    param(
+        [string]$Text,
+        [int]$MaxLength = 2000
+    )
+
+    $singleLine = ($Text -replace '\s+', ' ').Trim()
+    if ($singleLine.Length -le $MaxLength) {
+        return $singleLine
+    }
+    return $singleLine.Substring(0, $MaxLength).TrimEnd() + "... [truncated]"
+}
+
+function ConvertTo-CompactLiveLine {
+    param(
+        [string]$Stream,
+        [string]$Text
+    )
+
+    if ($Stream -ne "stdout") {
+        return ConvertTo-TruncatedText -Text $Text -MaxLength 2000
+    }
+
+    try {
+        $event = $Text | ConvertFrom-Json -ErrorAction Stop
+    } catch {
+        return ConvertTo-TruncatedText -Text $Text -MaxLength 2000
+    }
+
+    if ($event.type -eq "system") {
+        if ($event.subtype -eq "init") {
+            return "Claude session started; model=$($event.model); cwd=$($event.cwd)"
+        }
+        if ($null -ne $event.status) {
+            return "Claude status: $($event.status)"
+        }
+        return $null
+    }
+
+    if ($event.type -eq "assistant" -and $null -ne $event.message -and $null -ne $event.message.content) {
+        $parts = [System.Collections.Generic.List[string]]::new()
+        foreach ($content in $event.message.content) {
+            if ($content.type -eq "text" -and -not [string]::IsNullOrWhiteSpace($content.text)) {
+                $parts.Add((ConvertTo-TruncatedText -Text $content.text -MaxLength 2000))
+            } elseif ($content.type -eq "tool_use") {
+                $inputText = ""
+                if ($null -ne $content.input) {
+                    $inputText = ($content.input | ConvertTo-Json -Compress -Depth 5)
+                }
+                $parts.Add((ConvertTo-TruncatedText -Text "tool $($content.name): $inputText" -MaxLength 1000))
+            }
+        }
+        if ($parts.Count -gt 0) {
+            return ($parts -join " | ")
+        }
+        return $null
+    }
+
+    if ($event.type -eq "result") {
+        if (-not [string]::IsNullOrWhiteSpace($event.result)) {
+            return ConvertTo-TruncatedText -Text "Claude result: $($event.result)" -MaxLength 4000
+        }
+        return "Claude finished: $($event.subtype)"
+    }
+
+    return $null
 }
 
 function Resolve-Executable {
@@ -109,7 +183,7 @@ try {
     if ($null -eq $resolvedClaudePath) {
         $message = "Claude CLI was not found. Ask the user whether to install and configure Claude; if they decline, record that decision at $installDeclinedMarkerPath."
         $stderrLines.Add($message)
-        Write-RunLine -Stream "error" -Text $message -LogLines $logLines -Quiet:$NoLiveOutput
+        Write-RunLine -Stream "error" -Text $message -LogLines $logLines -Quiet:$NoLiveOutput -Raw:$RawLiveOutput
         throw $message
     }
 
@@ -189,7 +263,7 @@ exit $LASTEXITCODE
                 $stdoutDone = $true
             } else {
                 $stdoutLines.Add($line)
-                Write-RunLine -Stream "stdout" -Text $line -LogLines $logLines -Quiet:$NoLiveOutput
+                Write-RunLine -Stream "stdout" -Text $line -LogLines $logLines -Quiet:$NoLiveOutput -Raw:$RawLiveOutput
                 $lastOutputTime = Get-Date
                 $hadOutput = $true
                 $stdoutTask = $process.StandardOutput.ReadLineAsync()
@@ -202,7 +276,7 @@ exit $LASTEXITCODE
                 $stderrDone = $true
             } else {
                 $stderrLines.Add($line)
-                Write-RunLine -Stream "stderr" -Text $line -LogLines $logLines -Quiet:$NoLiveOutput
+                Write-RunLine -Stream "stderr" -Text $line -LogLines $logLines -Quiet:$NoLiveOutput -Raw:$RawLiveOutput
                 $lastOutputTime = Get-Date
                 $hadOutput = $true
                 $stderrTask = $process.StandardError.ReadLineAsync()
@@ -213,7 +287,7 @@ exit $LASTEXITCODE
             $idleSeconds = ((Get-Date) - $lastOutputTime).TotalSeconds
             if ($idleSeconds -ge $HeartbeatSeconds) {
                 $lastOutputTime = Get-Date
-                Write-RunLine -Stream "status" -Text "Claude is still running; waiting for output..." -LogLines $logLines -Quiet:$NoLiveOutput
+                Write-RunLine -Stream "status" -Text "Claude is still running; waiting for output..." -LogLines $logLines -Quiet:$NoLiveOutput -Raw:$RawLiveOutput
             }
         }
 
@@ -225,7 +299,7 @@ exit $LASTEXITCODE
     $exitCode = $process.ExitCode
 } catch {
     $stderrLines.Add($_.Exception.Message)
-    Write-RunLine -Stream "error" -Text $_.Exception.Message -LogLines $logLines -Quiet:$NoLiveOutput
+    Write-RunLine -Stream "error" -Text $_.Exception.Message -LogLines $logLines -Quiet:$NoLiveOutput -Raw:$RawLiveOutput
     $exitCode = 127
 }
 
@@ -284,7 +358,20 @@ $artifact = $artifactLines -join [Environment]::NewLine
 
 Remove-Item -LiteralPath $runnerPath -Force -ErrorAction SilentlyContinue
 
-$previewText = (($stdoutLines + $stderrLines) -join "`n") -replace '\s+', ' '
+$previewParts = [System.Collections.Generic.List[string]]::new()
+foreach ($line in $stdoutLines) {
+    $compact = ConvertTo-CompactLiveLine -Stream "stdout" -Text $line
+    if (-not [string]::IsNullOrWhiteSpace($compact)) {
+        $previewParts.Add($compact)
+    }
+}
+foreach ($line in $stderrLines) {
+    $compact = ConvertTo-CompactLiveLine -Stream "stderr" -Text $line
+    if (-not [string]::IsNullOrWhiteSpace($compact)) {
+        $previewParts.Add($compact)
+    }
+}
+$previewText = ConvertTo-TruncatedText -Text ($previewParts -join "`n") -MaxLength 4000
 $result = [ordered]@{
     success = ($exitCode -eq 0)
     exitCode = $exitCode
@@ -292,6 +379,7 @@ $result = [ordered]@{
     model = $Model
     fallbackModel = $FallbackModel
     effort = $Effort
+    rawLiveOutput = [bool]$RawLiveOutput
     needsClaudeInstall = ($null -eq (Resolve-Executable -Name $ClaudePath))
     installDeclinedMarkerPath = $installDeclinedMarkerPath
     artifactPath = $artifactPath

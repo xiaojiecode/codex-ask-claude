@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Ask Claude"
+  short_description: "Run local Claude CLI for frontend UI work"
+  default_prompt: "Use $codex-ask-claude to delegate frontend UI implementation to local Claude CLI and verify the result."

@@ -1,5 +1,28 @@
 # Codex Ask Claude
 
+Current stable release: [`v1.0.0`](https://github.com/xiaojiecode/codex-ask-claude/releases/tag/v1.0.0)
+
+Quick install into a local Codex skills directory:
+
+```powershell
+$dest = "$env:USERPROFILE\.codex\skills\codex-ask-claude"
+if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+git clone --depth 1 --branch v1.0.0 https://github.com/xiaojiecode/codex-ask-claude.git $dest
+```
+
+Quick smoke test:
+
+```powershell
+node "$env:USERPROFILE\.codex\skills\codex-ask-claude\scripts\invoke-claude-frontend.mjs" `
+  --workspace (Get-Location).Path `
+  --session-key "smoke" `
+  --permission-mode acceptEdits `
+  --allowed-tools "Read,Glob,Grep" `
+  --prompt "Read the README and summarize this project in two sentences. Do not edit files."
+```
+
+Restart Codex after installing or updating the skill so the skill metadata is reloaded.
+
 ## English
 
 `codex-ask-claude` is a Codex skill for frontend UI work. It lets Codex orchestrate the task while the local Claude CLI performs the actual frontend code edits.

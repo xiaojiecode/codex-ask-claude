@@ -12,7 +12,7 @@ function parseArgs(argv) {
   const result = {
     workspace: process.cwd(),
     claudePath: "claude",
-    artifactDir: ".omx/artifacts",
+    artifactDir: ".codex-ask-claude/artifacts",
     model: "sonnet",
     fallbackModel: "",
     effort: "medium",
@@ -352,9 +352,9 @@ async function run() {
   const slug = slugify(options.prompt);
   const artifactPath = join(artifactRoot, `claude-frontend-${slug}-${stamp}.md`);
   const logPath = join(artifactRoot, `claude-frontend-${slug}-${stamp}.log`);
-  const installDeclinedMarkerPath = join(workspacePath, ".omx", "state", "claude-install-declined.json");
+  const installDeclinedMarkerPath = join(workspacePath, ".codex-ask-claude", "state", "claude-install-declined.json");
   const sessionKey = slugifyKey(options.sessionKey);
-  const sessionStatePath = join(workspacePath, ".omx", "state", "claude-sessions", `${sessionKey}.json`);
+  const sessionStatePath = join(workspacePath, ".codex-ask-claude", "state", "claude-sessions", `${sessionKey}.json`);
   const sessionReuseEnabled = !options.noSessionReuse;
   const storedSession = sessionReuseEnabled && !options.newSession
     ? await readSessionState(sessionStatePath)

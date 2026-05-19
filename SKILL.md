@@ -15,7 +15,7 @@ Delegate frontend UI implementation to the local Claude CLI, then have Codex rev
 claude --version
 ```
 
-If `claude` is missing, check whether `.omx/state/claude-install-declined.json` exists in the target workspace. If it exists, do not ask again; tell the user Claude CLI is still missing and that a prior decline marker exists. If it does not exist, ask the user whether Codex should install and configure Claude CLI.
+If `claude` is missing, check whether `.codex-ask-claude/state/claude-install-declined.json` exists in the target workspace. If it exists, do not ask again; tell the user Claude CLI is still missing and that a prior decline marker exists. If it does not exist, ask the user whether Codex should install and configure Claude CLI.
 
 If the user declines installation/configuration, record the choice so future runs do not repeat the same question:
 
@@ -81,14 +81,14 @@ Use a direct `claude -p "<prompt>"` call only if the Node wrapper is unavailable
 
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.
 
-By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.omx/artifacts/*.log` and `.omx/artifacts/*.md`. Use `--raw-live-output` only when debugging the wrapper or Claude protocol output.
+By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.codex-ask-claude/artifacts/*.log` and `.codex-ask-claude/artifacts/*.md`. Use `--raw-live-output` only when debugging the wrapper or Claude protocol output.
 
 ## Session Reuse
 
 The wrapper keeps a lightweight Claude session state per workspace so repeated Codex calls can reuse Claude's conversation context. It is not a long-running background process; each run invokes Claude CLI normally, captures the returned `session_id`, and stores it under:
 
 ```text
-.omx/state/claude-sessions/<session-key>.json
+.codex-ask-claude/state/claude-sessions/<session-key>.json
 ```
 
 On the next run with the same workspace and session key, the wrapper passes `--resume <session_id>` to Claude CLI.

@@ -30,7 +30,7 @@ function parseArgs(argv) {
 
 const options = parseArgs(process.argv.slice(2));
 const workspacePath = resolve(options.workspace);
-const stateRoot = join(workspacePath, ".omx", "state");
+const stateRoot = join(workspacePath, ".codex-ask-claude", "state");
 const markerPath = join(stateRoot, "claude-install-declined.json");
 
 await mkdir(stateRoot, { recursive: true });

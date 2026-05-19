@@ -1,13 +1,13 @@
 # Codex Ask Claude
 
-Current stable release: [`v1.0.0`](https://github.com/xiaojiecode/codex-ask-claude/releases/tag/v1.0.0)
+Current stable release: [`v1.0.1`](https://github.com/xiaojiecode/codex-ask-claude/releases/tag/v1.0.1)
 
 Quick install into a local Codex skills directory:
 
 ```powershell
 $dest = "$env:USERPROFILE\.codex\skills\codex-ask-claude"
 if (Test-Path $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
-git clone --depth 1 --branch v1.0.0 https://github.com/xiaojiecode/codex-ask-claude.git $dest
+git clone --depth 1 --branch v1.0.1 https://github.com/xiaojiecode/codex-ask-claude.git $dest
 ```
 
 Quick smoke test:
@@ -31,7 +31,7 @@ Restart Codex after installing or updating the skill so the skill metadata is re
 
 - Delegates React, Vue, Svelte, Angular, HTML, CSS, Tailwind, component, layout, and responsive UI work to Claude CLI.
 - Shows compact Claude CLI progress while the model is running, so long or slow network calls are visible without flooding stdout.
-- Saves a Markdown artifact and a live output log under `.omx/artifacts`.
+- Saves a Markdown artifact and a live output log under `.codex-ask-claude/artifacts`.
 - Supports explicit model selection through `-Model`, `-FallbackModel`, and `-Effort`.
 - Detects missing Claude CLI and supports remembering when the user declines installation.
 
@@ -124,7 +124,7 @@ It only surfaces visible CLI output. It should not expose hidden chain-of-though
 The wrapper reuses Claude context across repeated calls in the same workspace. Each run captures Claude's returned `session_id` and stores it under:
 
 ```text
-.omx/state/claude-sessions/<session-key>.json
+.codex-ask-claude/state/claude-sessions/<session-key>.json
 ```
 
 The next run with the same session key passes `--resume <session_id>` to Claude CLI. This is a lightweight resume flow, not a long-running background process.
@@ -157,7 +157,7 @@ node ./scripts/remember-claude-install-declined.mjs \
   --reason "User declined Claude CLI setup for frontend delegation."
 ```
 
-This creates `.omx/state/claude-install-declined.json` in the target workspace so future runs can avoid repeated prompts.
+This creates `.codex-ask-claude/state/claude-install-declined.json` in the target workspace so future runs can avoid repeated prompts.
 
 ### Test
 
@@ -176,7 +176,7 @@ python C:\Users\Administrator\.codex\skills\.system\skill-creator\scripts\quick_
 
 - 将 React、Vue、Svelte、Angular、HTML、CSS、Tailwind、组件、布局、响应式 UI 等任务委托给 Claude CLI。
 - 在模型运行时展示精简进度，长时间调用或网络较差时不会像黑盒一样无响应，也不会把完整 `stream-json` 刷满 stdout。
-- 在 `.omx/artifacts` 下保存 Markdown artifact 和完整运行日志。
+- 在 `.codex-ask-claude/artifacts` 下保存 Markdown artifact 和完整运行日志。
 - 支持通过 `-Model`、`-FallbackModel`、`-Effort` 显式选择模型策略。
 - 能检测 Claude CLI 是否缺失，并在用户拒绝安装后记录状态，避免反复询问。
 
@@ -269,7 +269,7 @@ node ./scripts/invoke-claude-frontend.mjs \
 wrapper 会在同一个 workspace 内复用 Claude 上下文。每次运行会捕获 Claude 返回的 `session_id`，并写入：
 
 ```text
-.omx/state/claude-sessions/<session-key>.json
+.codex-ask-claude/state/claude-sessions/<session-key>.json
 ```
 
 下一次使用同一个 session key 调用时，wrapper 会自动给 Claude CLI 传 `--resume <session_id>`。这是轻量级 resume 流程，不是常驻后台进程。
@@ -302,7 +302,7 @@ node ./scripts/remember-claude-install-declined.mjs \
   --reason "User declined Claude CLI setup for frontend delegation."
 ```
 
-这会在目标工作区生成 `.omx/state/claude-install-declined.json`，后续运行时可避免重复询问。
+这会在目标工作区生成 `.codex-ask-claude/state/claude-install-declined.json`，后续运行时可避免重复询问。
 
 ### 测试
 

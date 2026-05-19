@@ -39,6 +39,7 @@ try {
       fakeClaude,
       [
         "@echo off",
+        "echo {\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"11111111-1111-1111-1111-111111111111\",\"cwd\":\"workspace\",\"model\":\"fake\"}",
         "echo NODE_FAKE_STDOUT:%*",
         "powershell -NoProfile -Command \"Start-Sleep -Milliseconds 300\"",
         "echo NODE_FAKE_STDERR 1>&2",
@@ -65,6 +66,7 @@ try {
       fakeClaude,
       [
         "#!/usr/bin/env sh",
+        "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"11111111-1111-1111-1111-111111111111\",\"cwd\":\"workspace\",\"model\":\"fake\"}'",
         "printf 'NODE_FAKE_STDOUT:%s\\n' \"$*\"",
         "sleep 0.3",
         "printf 'NODE_FAKE_STDERR\\n' >&2",
@@ -151,6 +153,9 @@ try {
   if (parsed.permissionMode !== "acceptEdits" || parsed.allowedTools?.[0] !== "Read,Edit" || parsed.disallowedTools?.[0] !== "Bash(rm *)" || parsed.addDirs?.[0] !== workspace) {
     throw new Error(`Permission control metadata was not captured: ${jsonLine}`);
   }
+  if (parsed.sessionId !== "11111111-1111-1111-1111-111111111111" || parsed.resumedSession !== false) {
+    throw new Error(`Expected first run to capture a fresh Claude session id: ${jsonLine}`);
+  }
 
   const artifact = await readFile(parsed.artifactPath, "utf8");
   const log = await readFile(parsed.logPath, "utf8");
@@ -159,6 +164,23 @@ try {
   }
   if (!log.includes("[stdout] NODE_FAKE_STDOUT") || !log.includes("[stderr] NODE_FAKE_STDERR")) {
     throw new Error("Expected log to include tagged stdout and stderr.");
+  }
+
+  if (process.platform === "win32") {
+    const unsafeShim = await run(process.execPath, [
+      join(repoRoot, "scripts", "invoke-claude-frontend.mjs"),
+      "--workspace",
+      workspace,
+      "--claude-path",
+      fakeClaude,
+      "--artifact-dir",
+      ".omx/test-artifacts",
+      "--prompt",
+      "Unsafe %COMSPEC% & echo BAD",
+    ]);
+    if (unsafeShim.code === 0 || !unsafeShim.stderr.includes("Refusing to pass shell-sensitive characters")) {
+      throw new Error(`Expected unsafe Windows .cmd shim arguments to be refused.\n${unsafeShim.stderr}\n${unsafeShim.stdout}`);
+    }
   }
 
   const pathLookup = await run(
@@ -183,6 +205,9 @@ try {
   );
   if (pathLookup.code !== 0 || !pathLookup.stdout.includes("NODE_FAKE_STDOUT")) {
     throw new Error(`Expected PATH lookup to find fake Claude.\n${pathLookup.stderr}\n${pathLookup.stdout}`);
+  }
+  if (!pathLookup.stdout.includes("--resume") || !pathLookup.stdout.includes("11111111-1111-1111-1111-111111111111")) {
+    throw new Error(`Expected second run to resume the stored Claude session.\n${pathLookup.stderr}\n${pathLookup.stdout}`);
   }
 
   const compact = await run(process.execPath, [

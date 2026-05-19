@@ -52,6 +52,8 @@ node ./scripts/invoke-claude-frontend.mjs \
 
 The wrapper works on Windows, macOS, and Linux. It expands `~` in workspace, artifact, and Claude executable paths, and on macOS/Linux also searches common non-login-shell locations such as `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` when `claude` is not on `PATH`.
 
+On Windows, prefer the real `claude.exe`. If only a `.cmd` / `.bat` shim is found, the wrapper refuses prompts or arguments containing shell-sensitive characters such as `%`, `!`, `&`, `|`, `<`, `>`, `^`, or newlines instead of passing them through `cmd.exe`.
+
 ### Command Permissions
 
 The wrapper does not grant Claude extra privileges. Claude's available commands and tools are still governed by the local Claude CLI policy, the current OS user, and the target workspace. By default, the wrapper does not set a bypass mode.
@@ -93,6 +95,34 @@ The wrapper is built for slow model calls and poor network conditions. It:
 - records the full raw stdout/stderr stream in `.log` and `.md` artifacts
 
 It only surfaces visible CLI output. It should not expose hidden chain-of-thought. Use `--raw-live-output` only when you need the uncompressed live stream for debugging.
+
+### Session Reuse
+
+The wrapper reuses Claude context across repeated calls in the same workspace. Each run captures Claude's returned `session_id` and stores it under:
+
+```text
+.omx/state/claude-sessions/<session-key>.json
+```
+
+The next run with the same session key passes `--resume <session_id>` to Claude CLI. This is a lightweight resume flow, not a long-running background process.
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --session-key "review-main" \
+  --prompt "Continue reviewing the wrapper from the previous run."
+```
+
+Session options:
+
+- Default session key: `default`
+- `--session-key <name>` separates contexts for different tasks.
+- `--new-session` ignores the stored session once and replaces it.
+- `--no-session-reuse` disables session state for one run.
+- `--resume-session <uuid>` resumes a known Claude session id.
+- `--fork-session` asks Claude CLI to fork when resuming.
+
+Use separate keys for unrelated projects, customers, secrets, or review threads.
 
 ### Missing Claude CLI
 
@@ -167,6 +197,8 @@ node ./scripts/invoke-claude-frontend.mjs \
 
 该 wrapper 兼容 Windows、macOS 和 Linux。它会展开 workspace、artifact、Claude 可执行文件路径中的 `~`，并且在 macOS/Linux 的非登录 shell 环境下，当 `PATH` 里找不到 `claude` 时，会额外搜索 `~/.local/bin`、`~/bin`、`/opt/homebrew/bin`、`/usr/local/bin` 等常见目录。
 
+Windows 上优先使用真实的 `claude.exe`。如果只找到 `.cmd` / `.bat` shim，wrapper 会拒绝包含 `%`、`!`、`&`、`|`、`<`、`>`、`^` 或换行等 shell 敏感字符的 prompt/参数，而不是把它们交给 `cmd.exe` 解析。
+
 ### 命令权限控制
 
 wrapper 不会给 Claude 额外提权。Claude 能使用哪些命令和工具，仍由本机 Claude CLI 策略、当前系统用户权限和目标工作区共同决定。默认情况下，wrapper 不设置绕过权限检查的模式。
@@ -208,6 +240,34 @@ node ./scripts/invoke-claude-frontend.mjs \
 - 在 `.log` 和 `.md` artifact 中保存完整原始 stdout/stderr
 
 脚本只展示 CLI 可见输出，不应暴露隐藏的 chain-of-thought。只有调试 wrapper 或 Claude 协议输出时才建议使用 `--raw-live-output` 恢复原始实时流。
+
+### 会话复用
+
+wrapper 会在同一个 workspace 内复用 Claude 上下文。每次运行会捕获 Claude 返回的 `session_id`，并写入：
+
+```text
+.omx/state/claude-sessions/<session-key>.json
+```
+
+下一次使用同一个 session key 调用时，wrapper 会自动给 Claude CLI 传 `--resume <session_id>`。这是轻量级 resume 流程，不是常驻后台进程。
+
+```bash
+node ./scripts/invoke-claude-frontend.mjs \
+  --workspace "/path/to/frontend-project" \
+  --session-key "review-main" \
+  --prompt "Continue reviewing the wrapper from the previous run."
+```
+
+会话选项：
+
+- 默认 session key：`default`
+- `--session-key <name>` 用于区分不同任务上下文。
+- `--new-session` 本次忽略旧会话，并用新返回的 session 覆盖状态。
+- `--no-session-reuse` 本次禁用会话状态读写。
+- `--resume-session <uuid>` 显式恢复一个已知 Claude session。
+- `--fork-session` 在恢复时要求 Claude CLI fork 出新 session。
+
+不同项目、客户、密钥或审查线程建议使用不同 session key。
 
 ### Claude CLI 缺失处理
 

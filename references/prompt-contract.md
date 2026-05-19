@@ -34,6 +34,8 @@ If Claude's first pass is close but incomplete, send a short follow-up prompt th
 
 Before invoking Claude, choose the smallest permission surface the task needs. For ordinary UI edits, prefer explicit allowed tools such as `Read,Edit,Glob,Grep` and deny risky shell patterns when shell execution is unnecessary. Do not use bypass permission flags from this skill. If Claude asks for surprising command access, stop and ask the user before rerunning with broader permissions.
 
+Use a distinct `--session-key` for each ongoing review, feature, branch, or customer context so Claude can reuse useful conversation state without blending unrelated work. Use `--new-session` when the old Claude context is stale.
+
 For slow network or long model calls, invoke the Node wrapper with live output enabled and a generous outer command timeout. The terminal shows compact progress by default; use the saved `.omx/artifacts/*.log` for the raw stdout/stderr stream, or pass `--raw-live-output` only when debugging protocol-level output.
 
 Model defaults:

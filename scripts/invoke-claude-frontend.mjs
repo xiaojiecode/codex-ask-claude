@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { delimiter } from "node:path";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { constants } from "node:fs";
@@ -25,6 +25,11 @@ function parseArgs(argv) {
     disallowedTools: [],
     tools: "",
     addDirs: [],
+    sessionKey: "default",
+    noSessionReuse: false,
+    newSession: false,
+    resumeSession: "",
+    forkSession: false,
   };
 
   const aliases = {
@@ -49,6 +54,8 @@ function parseArgs(argv) {
     "--disallowed-tools": "disallowedTools",
     "--tools": "tools",
     "--add-dir": "addDirs",
+    "--session-key": "sessionKey",
+    "--resume-session": "resumeSession",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -59,6 +66,18 @@ function parseArgs(argv) {
     }
     if (arg === "--raw-live-output") {
       result.rawLiveOutput = true;
+      continue;
+    }
+    if (arg === "--no-session-reuse") {
+      result.noSessionReuse = true;
+      continue;
+    }
+    if (arg === "--new-session") {
+      result.newSession = true;
+      continue;
+    }
+    if (arg === "--fork-session") {
+      result.forkSession = true;
       continue;
     }
 
@@ -90,6 +109,11 @@ function parseArgs(argv) {
 function slugify(text) {
   const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return (slug || "frontend-ui").slice(0, 48).replace(/-+$/g, "") || "frontend-ui";
+}
+
+function slugifyKey(text) {
+  const slug = String(text ?? "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return (slug || "default").slice(0, 80).replace(/-+$/g, "") || "default";
 }
 
 function timestampForFile(date = new Date()) {
@@ -155,6 +179,9 @@ function compactLiveLine(stream, text) {
     if (event.status !== undefined && event.status !== null && String(event.status).trim()) {
       return `Claude status: ${truncateText(event.status)}`;
     }
+    if (event.subtype && event.subtype !== "ready") {
+      return `Claude system: ${truncateText(event.subtype)}`;
+    }
     return "";
   }
 
@@ -189,6 +216,17 @@ function quoteForCmd(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+function assertSafeWindowsCommandShimArgs(args) {
+  const unsafePattern = /[\r\n%&|<>^!]/;
+  const unsafeArg = args.find((arg) => unsafePattern.test(String(arg)));
+  if (unsafeArg !== undefined) {
+    throw new Error(
+      "Refusing to pass shell-sensitive characters through a Windows .cmd/.bat Claude shim. "
+      + "Install or point --claude-path at claude.exe for prompts containing %, !, &, |, <, >, ^, or newlines.",
+    );
+  }
+}
+
 function buildClaudeSpawn(resolvedClaudePath, claudeArgs) {
   if (!isWindowsCommandShim(resolvedClaudePath)) {
     return {
@@ -198,6 +236,7 @@ function buildClaudeSpawn(resolvedClaudePath, claudeArgs) {
     };
   }
 
+  assertSafeWindowsCommandShimArgs(claudeArgs);
   return {
     command: process.env.ComSpec || "cmd.exe",
     args: [
@@ -208,6 +247,40 @@ function buildClaudeSpawn(resolvedClaudePath, claudeArgs) {
     ],
     windowsVerbatimArguments: true,
   };
+}
+
+function extractClaudeSessionId(lines) {
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.startsWith("{")) {
+      continue;
+    }
+    try {
+      const event = JSON.parse(line);
+      if (typeof event.session_id === "string" && event.session_id) {
+        return event.session_id;
+      }
+      if (typeof event.sessionId === "string" && event.sessionId) {
+        return event.sessionId;
+      }
+    } catch {
+      // Ignore non-JSON lines and keep scanning.
+    }
+  }
+  return "";
+}
+
+async function readSessionState(statePath) {
+  try {
+    return JSON.parse(await readFile(statePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function writeSessionState(statePath, state) {
+  await mkdir(dirname(statePath), { recursive: true });
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
 function writeRunLine(stream, text, logStream, quiet, raw = false) {
@@ -251,9 +324,11 @@ async function resolveExecutable(command) {
     ...defaultExecutableSearchPaths(),
   ];
   const uniquePathParts = [...new Set(pathParts.map(expandHomePath))];
+  const hasExplicitWindowsExtension = process.platform === "win32" && extname(expandedCommand) !== "";
+  const extensionsToTry = hasExplicitWindowsExtension ? [""] : pathExt;
 
   for (const pathPart of uniquePathParts) {
-    for (const ext of pathExt) {
+    for (const ext of extensionsToTry) {
       const candidate = join(pathPart, process.platform === "win32" && expandedCommand.toLowerCase().endsWith(ext.toLowerCase()) ? expandedCommand : `${expandedCommand}${ext}`);
       if (await canExecute(candidate)) {
         return candidate;
@@ -278,6 +353,14 @@ async function run() {
   const artifactPath = join(artifactRoot, `claude-frontend-${slug}-${stamp}.md`);
   const logPath = join(artifactRoot, `claude-frontend-${slug}-${stamp}.log`);
   const installDeclinedMarkerPath = join(workspacePath, ".omx", "state", "claude-install-declined.json");
+  const sessionKey = slugifyKey(options.sessionKey);
+  const sessionStatePath = join(workspacePath, ".omx", "state", "claude-sessions", `${sessionKey}.json`);
+  const sessionReuseEnabled = !options.noSessionReuse;
+  const storedSession = sessionReuseEnabled && !options.newSession
+    ? await readSessionState(sessionStatePath)
+    : null;
+  const sessionToResume = options.resumeSession || storedSession?.sessionId || "";
+  const resumedSession = Boolean(sessionReuseEnabled && sessionToResume && !options.newSession);
   const logStream = createWriteStream(logPath, { encoding: "utf8" });
 
   const stdoutLines = [];
@@ -328,6 +411,12 @@ async function run() {
       }
       for (const addDir of options.addDirs) {
         claudeArgs.push("--add-dir", expandHomePath(addDir));
+      }
+      if (resumedSession) {
+        claudeArgs.push("--resume", sessionToResume);
+        if (options.forkSession) {
+          claudeArgs.push("--fork-session");
+        }
       }
       const spawnSpec = buildClaudeSpawn(resolvedClaudePath, claudeArgs);
       const child = spawn(spawnSpec.command, spawnSpec.args, {
@@ -434,6 +523,23 @@ async function run() {
   await mkdir(dirname(artifactPath), { recursive: true });
   await writeFile(artifactPath, artifact, "utf8");
 
+  const sessionId = extractClaudeSessionId(stdoutLines);
+  if (sessionReuseEnabled && sessionId) {
+    await writeSessionState(sessionStatePath, {
+      sessionKey,
+      sessionId,
+      previousSessionId: resumedSession ? sessionToResume : storedSession?.sessionId || "",
+      resumedSession,
+      forkedSession: Boolean(options.forkSession && resumedSession),
+      updatedAt: new Date().toISOString(),
+      workspacePath,
+      model: options.model,
+      effort: options.effort,
+      artifactPath,
+      logPath,
+    });
+  }
+
   const outputPreview = truncateText(
     [
       ...stdoutLines.map((line) => compactLiveLine("stdout", line)).filter(Boolean),
@@ -454,6 +560,11 @@ async function run() {
     disallowedTools: options.disallowedTools,
     tools: options.tools,
     addDirs: options.addDirs,
+    sessionReuseEnabled,
+    sessionKey,
+    sessionId,
+    resumedSession,
+    sessionStatePath,
     needsClaudeInstall: exitCode === 127,
     installDeclinedMarkerPath,
     artifactPath,

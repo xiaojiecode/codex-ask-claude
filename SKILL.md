@@ -49,6 +49,8 @@ node ./scripts/invoke-claude-frontend.mjs \
 
 The wrapper expands `~` in workspace, artifact, and Claude executable paths. On macOS/Linux, it also searches common non-login-shell locations such as `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` when `claude` is not on `PATH`.
 
+On Windows, prefer the real `claude.exe`. If only a `.cmd` / `.bat` shim is found, the wrapper refuses prompts or arguments containing shell-sensitive characters such as `%`, `!`, `&`, `|`, `<`, `>`, `^`, or newlines instead of passing them through `cmd.exe`.
+
 ## Command Permission Control
 
 Claude command and tool permissions are controlled by the local Claude CLI session, not by Codex. The wrapper must not weaken that boundary: it does not elevate OS privileges, does not bypass Claude permission checks by default, and does not add extra filesystem access unless explicitly requested.
@@ -80,6 +82,27 @@ Use a direct `claude -p "<prompt>"` call only if the Node wrapper is unavailable
 The wrapper is designed for slow or flaky network runs. It waits for long-running calls, streams visible CLI output as it arrives, and records the full output log for later review.
 
 By default, Claude `stream-json` stdout is compacted in the terminal to key progress lines and the final result so large tool payloads do not flood Codex output. The raw stream is still saved in `.omx/artifacts/*.log` and `.omx/artifacts/*.md`. Use `--raw-live-output` only when debugging the wrapper or Claude protocol output.
+
+## Session Reuse
+
+The wrapper keeps a lightweight Claude session state per workspace so repeated Codex calls can reuse Claude's conversation context. It is not a long-running background process; each run invokes Claude CLI normally, captures the returned `session_id`, and stores it under:
+
+```text
+.omx/state/claude-sessions/<session-key>.json
+```
+
+On the next run with the same workspace and session key, the wrapper passes `--resume <session_id>` to Claude CLI.
+
+Session controls:
+
+- Default: use session key `default` and resume it when available.
+- `--session-key <name>`: keep separate Claude contexts for different tasks, branches, or review threads.
+- `--new-session`: ignore the stored session once and replace it with the new returned session.
+- `--no-session-reuse`: disable reading and writing session state for one run.
+- `--resume-session <uuid>`: explicitly resume a known Claude session id and update the local state.
+- `--fork-session`: when resuming, ask Claude CLI to fork into a new session id.
+
+Use separate session keys when prompts contain different secrets, customers, or unrelated task context. Do not rely on session reuse as the source of truth; Codex must still inspect the current files and review the final diff.
 
 ## Model Selection
 

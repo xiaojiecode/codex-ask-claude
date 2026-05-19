@@ -31,3 +31,12 @@ After editing, summarize:
 ```
 
 If Claude's first pass is close but incomplete, send a short follow-up prompt that includes the failing check, the observed issue, and the exact file or UI surface to correct.
+
+For slow network or long model calls, invoke the wrapper with live output enabled and a generous outer command timeout. Use the streamed stdout/stderr to understand whether Claude is still working, blocked on a tool prompt, or failing before the run ends.
+
+Model defaults:
+
+- Use `-Model sonnet -Effort medium` for normal frontend work.
+- Use `-Model sonnet -Effort high` when the UI task spans many files or needs careful debugging.
+- Use `-Model opus -Effort high` only for high-ambiguity redesigns or when Sonnet repeatedly fails.
+- Add `-FallbackModel opus` when reliability matters more than speed.
